@@ -59,6 +59,30 @@ Slack Bot は Discord Bot と似ている部分もあるが、最初に少しだ
 * ngrok または VPS 上の公開URL
 * JAPAN AI API Key
 * `.env` で環境変数を管理できる準備
+* リポジトリ直下の `.python-version` を使える Python バージョン管理ツール、または 3.11 系のローカル実行環境
+
+### 4.1 Python 3.11 を実行前提にそろえる
+
+このプロジェクトは **Python 3.11 固定で実行する前提** とする。
+`pyproject.toml` では `>=3.11,<3.12` を要求し、リポジトリ直下の `.python-version` でも `3.11` を指定する。
+
+### 4.2 使用中 Python の確認方法
+
+作業前に、今のシェルが 3.11 系を向いていることを確認する。
+
+```bash
+python --version
+python3 --version
+cat .python-version
+```
+
+期待値の例:
+
+```text
+Python 3.11.x
+```
+
+`python3` が 3.12 以上を指している場合は、pyenv や mise などで 3.11 に切り替えてから進める。
 
 ---
 
