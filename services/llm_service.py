@@ -33,76 +33,157 @@ class LlmService:
         return self._fallback_digest(period_label=period_label, messages=messages)
 
     def _request_url_summary(self, url: str, context_text: str, explanation_level: int) -> UrlSummary | None:
-        prompt = {
-            "model": self.settings.japan_ai_model,
-            "input": {
-                "task": "summarize_url",
-                "url": url,
-                "context_text": context_text,
-                "explanation_level": explanation_level,
-            },
-        }
+        prompt = self._build_url_prompt(url=url, context_text=context_text, explanation_level=explanation_level)
         if httpx is None:
             return None
         try:
             with httpx.Client(timeout=self.settings.request_timeout_seconds) as client:
                 response = client.post(
-                    self.settings.japan_ai_base_url.rstrip("/") + "/chat/completions",
-                    headers={"Authorization": f"Bearer {self.settings.japan_ai_api_key}"},
+                    self._chat_url(),
+                    headers=self._headers(),
                     json=prompt,
                 )
                 response.raise_for_status()
                 data = response.json()
         except httpx.HTTPError:
             return None
-
-        output = data.get("output", {})
-        if not isinstance(output, dict):
+        content = self._extract_chat_message(data)
+        if not content:
             return None
+        parsed = self._parse_key_value_block(content)
+        bullets = self._split_list_field(parsed.get("bullets", ""))
         return UrlSummary(
             url=url,
-            title=output.get("title", url),
-            summary=output.get("summary", context_text[:180]),
-            audience_label=output.get("audience_label", "両方"),
+            title=parsed.get("title", url),
+            summary=parsed.get("summary", context_text[:180]),
+            audience_label=parsed.get("audience_label", "両方"),
             explanation_level=explanation_level,
-            bullets=list(output.get("bullets", []))[:4],
-            value_line=output.get("value_line", "共有された理由を短く確認できる内容です。"),
+            bullets=bullets[:4] if bullets else [context_text[:80]],
+            value_line=parsed.get("value_line", "共有された理由を短く確認できる内容です。"),
         )
 
     def _request_digest(self, period_label: str, messages: list[MessageRecord]) -> DigestResult | None:
-        prompt = {
-            "model": self.settings.japan_ai_model,
-            "input": {
-                "task": "build_digest",
-                "period_label": period_label,
-                "messages": [message.text for message in messages],
-            },
-        }
+        prompt = self._build_digest_prompt(period_label=period_label, messages=messages)
         if httpx is None:
             return None
         try:
             with httpx.Client(timeout=self.settings.request_timeout_seconds) as client:
                 response = client.post(
-                    self.settings.japan_ai_base_url.rstrip("/") + "/chat/completions",
-                    headers={"Authorization": f"Bearer {self.settings.japan_ai_api_key}"},
+                    self._chat_url(),
+                    headers=self._headers(),
                     json=prompt,
                 )
                 response.raise_for_status()
                 data = response.json()
         except httpx.HTTPError:
             return None
-
-        output = data.get("output", {})
-        if not isinstance(output, dict):
+        content = self._extract_chat_message(data)
+        if not content:
             return None
+        parsed = self._parse_key_value_block(content)
         return DigestResult(
             period_label=period_label,
-            summary=output.get("summary", f"{period_label} の投稿をまとめました。"),
-            themes=list(output.get("themes", []))[:5],
-            learnings=list(output.get("learnings", []))[:5],
-            action_candidates=list(output.get("action_candidates", []))[:5],
-            url_summaries=list(output.get("url_summaries", []))[:5],
+            summary=parsed.get("summary", f"{period_label} の投稿をまとめました。"),
+            themes=self._split_list_field(parsed.get("themes", ""))[:5],
+            learnings=self._split_list_field(parsed.get("learnings", ""))[:5],
+            action_candidates=self._split_list_field(parsed.get("action_candidates", ""))[:5],
+            url_summaries=self._split_list_field(parsed.get("url_summaries", ""))[:5],
         )
+
+    def _headers(self) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {self.settings.japan_ai_api_key}",
+            "Content-Type": "application/json; charset=utf-8",
+        }
+
+    def _chat_url(self) -> str:
+        return self.settings.japan_ai_base_url.rstrip("/") + self.settings.japan_ai_chat_endpoint
+
+    def _artifact_ids(self) -> list[str]:
+        return [item.strip() for item in self.settings.japan_ai_artifact_ids.split(",") if item.strip()]
+
+    def _build_url_prompt(self, url: str, context_text: str, explanation_level: int) -> dict[str, object]:
+        return {
+            "prompt": (
+                "次のURL共有投稿について、Slackスレッド返信用の要約を作成してください。\n"
+                "JSONではなく、次のキーを含むプレーンテキストで返してください。\n"
+                "title:\nsummary:\naudience_label:\nbullets:\nvalue_line:\n"
+                "audience_label は エンジニア向け / ビジネス向け / 両方 のいずれかに限定してください。\n"
+                f"URL: {url}\n"
+                f"共有文脈: {context_text}\n"
+                f"説明レベル: {explanation_level}\n"
+                "bullets は 1 行 1 項目で、先頭に '- ' を付けてください。"
+            ),
+            "systemPrompt": (
+                "あなたは Slack times 投稿を整理するアシスタントです。"
+                "日本語で簡潔に、Slack にそのまま貼れる出力だけを返してください。"
+            ),
+            "artifactIds": self._artifact_ids(),
+            "model": self.settings.japan_ai_model,
+            "chatContextLimit": 10,
+            "stream": False,
+            "temperature": self.settings.japan_ai_temperature,
+        }
+
+    def _build_digest_prompt(self, period_label: str, messages: list[MessageRecord]) -> dict[str, object]:
+        message_block = "\n".join(f"- {message.text}" for message in messages) or "- 投稿なし"
+        return {
+            "prompt": (
+                "次の投稿群から digest を作成してください。\n"
+                "JSONではなく、次のキーを含むプレーンテキストで返してください。\n"
+                "summary:\nthemes:\nlearnings:\naction_candidates:\nurl_summaries:\n"
+                "themes, learnings, action_candidates, url_summaries は 1 行 1 項目で、先頭に '- ' を付けてください。\n"
+                f"対象期間: {period_label}\n"
+                f"投稿一覧:\n{message_block}"
+            ),
+            "systemPrompt": (
+                "あなたは Slack times の digest 編集者です。"
+                "日本語で簡潔に、Slack 投稿向けの要点だけを返してください。"
+            ),
+            "artifactIds": self._artifact_ids(),
+            "model": self.settings.japan_ai_model,
+            "chatContextLimit": 10,
+            "stream": False,
+            "temperature": self.settings.japan_ai_temperature,
+        }
+
+    @staticmethod
+    def _extract_chat_message(data: dict[str, object]) -> str | None:
+        status = data.get("status")
+        if status != "succeeded":
+            return None
+        message = data.get("chatMessage")
+        return message.strip() if isinstance(message, str) else None
+
+    @staticmethod
+    def _parse_key_value_block(content: str) -> dict[str, str]:
+        parsed: dict[str, str] = {}
+        current_key: str | None = None
+        for raw_line in content.splitlines():
+            line = raw_line.rstrip()
+            if not line:
+                continue
+            if ":" in line and not line.lstrip().startswith("- "):
+                key, value = line.split(":", 1)
+                normalized_key = key.strip().lower()
+                current_key = normalized_key
+                parsed[current_key] = value.strip()
+            elif current_key:
+                existing = parsed.get(current_key, "")
+                parsed[current_key] = f"{existing}\n{line}".strip()
+        return parsed
+
+    @staticmethod
+    def _split_list_field(value: str) -> list[str]:
+        items: list[str] = []
+        for line in value.splitlines():
+            normalized = line.strip()
+            if not normalized:
+                continue
+            if normalized.startswith("- "):
+                normalized = normalized[2:].strip()
+            items.append(normalized)
+        return items
 
     def _fallback_url_summary(self, url: str, context_text: str, explanation_level: int) -> UrlSummary:
         lowered = context_text.lower()

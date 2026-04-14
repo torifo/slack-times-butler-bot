@@ -150,6 +150,31 @@ class ServicesTestCase(unittest.TestCase):
         self.assertIn("投稿 1 件", digest.summary)
         self.assertTrue(digest.themes)
 
+    def test_llm_service_parses_japan_ai_non_stream_response(self) -> None:
+        parsed = LlmService._extract_chat_message(
+            {
+                "status": "succeeded",
+                "sessionId": "abc123",
+                "chatMessage": "summary: 要約\n"
+                "themes:\n- API\n- Slack\n"
+                "learnings:\n- 学び1\n"
+                "action_candidates:\n- 行動1\n"
+                "url_summaries:\n- https://example.com",
+                "references": [],
+            }
+        )
+
+        self.assertEqual(
+            "summary: 要約\nthemes:\n- API\n- Slack\nlearnings:\n- 学び1\naction_candidates:\n- 行動1\nurl_summaries:\n- https://example.com",
+            parsed,
+        )
+
+    def test_llm_service_rejects_failed_response(self) -> None:
+        parsed = LlmService._extract_chat_message(
+            {"status": "failed", "errorMessage": "model not found", "references": []}
+        )
+        self.assertIsNone(parsed)
+
 
 if __name__ == "__main__":
     unittest.main()

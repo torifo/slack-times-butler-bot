@@ -18,7 +18,7 @@
 2. Slack App 管理画面で `Signing Secret` と `Bot User OAuth Token` を取得する
 3. `SOURCE_CHANNEL` には監視対象 channel の **ID** を入れる
 4. `POST_TARGET_CHANNEL` には digest 投稿先 channel の **ID** を入れる
-5. JAPAN AI の管理画面で API Key と Base URL を確認する
+5. JAPAN AI の管理画面で API Key、Base URL、必要なら artifactId を確認する
 6. `.env` に実値を設定し、`git status` に `.env` や `data/` が出ないことを確認する
 
 ## 3. channel ID の取り方
@@ -33,11 +33,12 @@
 
 API の endpoint や payload 形式が未確定なら、次の順で埋める。
 
-1. ベンダー管理画面または公式仕様から base URL を確認する
-2. chat completion 相当の endpoint 名を確認する
-3. request body の必須項目を確認する
-4. `settings.py` の `JAPAN_AI_BASE_URL` と `services/llm_service.py` の request payload を更新する
-5. 実接続テスト後にレスポンスの JSON パース項目を確定する
+1. Base URL は `https://api.japan-ai.co.jp` を使う
+2. 非ストリーミング利用なら `POST /chat/v1` または `POST /chat/v2` を選ぶ
+3. 現在の実装は `POST /chat/v2` に `stream: false` で送る
+4. `Authorization: Bearer <API_KEY>` で認証する
+5. RAG を使う場合は `JAPAN_AI_ARTIFACT_IDS` に artifactId をカンマ区切りで設定する
+6. 実接続テスト後に、必要なら model や temperature を調整する
 
 ## 5. public 化前の確認項目
 

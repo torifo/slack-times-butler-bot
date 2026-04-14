@@ -34,8 +34,11 @@ if BaseSettings:
         url_reaction_name: str = Field(default="eyes", alias="URL_REACTION_NAME")
 
         japan_ai_api_key: str = Field(default="", alias="JAPAN_AI_API_KEY")
-        japan_ai_base_url: str = Field(default="https://api.japan-ai.example/v1", alias="JAPAN_AI_BASE_URL")
-        japan_ai_model: str = Field(default="japan-ai-chat", alias="JAPAN_AI_MODEL")
+        japan_ai_base_url: str = Field(default="https://api.japan-ai.co.jp", alias="JAPAN_AI_BASE_URL")
+        japan_ai_model: str = Field(default="gpt-4o", alias="JAPAN_AI_MODEL")
+        japan_ai_artifact_ids: str = Field(default="", alias="JAPAN_AI_ARTIFACT_IDS")
+        japan_ai_chat_endpoint: str = Field(default="/chat/v2", alias="JAPAN_AI_CHAT_ENDPOINT")
+        japan_ai_temperature: float = Field(default=0.1, alias="JAPAN_AI_TEMPERATURE")
         request_timeout_seconds: float = Field(default=20.0, alias="REQUEST_TIMEOUT_SECONDS")
 
 
@@ -55,8 +58,11 @@ else:
         default_explanation_level: int = 2
         url_reaction_name: str = "eyes"
         japan_ai_api_key: str = ""
-        japan_ai_base_url: str = "https://api.japan-ai.example/v1"
-        japan_ai_model: str = "japan-ai-chat"
+        japan_ai_base_url: str = "https://api.japan-ai.co.jp"
+        japan_ai_model: str = "gpt-4o"
+        japan_ai_artifact_ids: str = ""
+        japan_ai_chat_endpoint: str = "/chat/v2"
+        japan_ai_temperature: float = 0.1
         request_timeout_seconds: float = 20.0
 
         def __init__(self, **overrides: object):
@@ -74,8 +80,11 @@ else:
                 "default_explanation_level": int(os.getenv("DEFAULT_EXPLANATION_LEVEL", "2")),
                 "url_reaction_name": os.getenv("URL_REACTION_NAME", "eyes"),
                 "japan_ai_api_key": os.getenv("JAPAN_AI_API_KEY", ""),
-                "japan_ai_base_url": os.getenv("JAPAN_AI_BASE_URL", "https://api.japan-ai.example/v1"),
-                "japan_ai_model": os.getenv("JAPAN_AI_MODEL", "japan-ai-chat"),
+                "japan_ai_base_url": os.getenv("JAPAN_AI_BASE_URL", "https://api.japan-ai.co.jp"),
+                "japan_ai_model": os.getenv("JAPAN_AI_MODEL", "gpt-4o"),
+                "japan_ai_artifact_ids": os.getenv("JAPAN_AI_ARTIFACT_IDS", ""),
+                "japan_ai_chat_endpoint": os.getenv("JAPAN_AI_CHAT_ENDPOINT", "/chat/v2"),
+                "japan_ai_temperature": float(os.getenv("JAPAN_AI_TEMPERATURE", "0.1")),
                 "request_timeout_seconds": float(os.getenv("REQUEST_TIMEOUT_SECONDS", "20.0")),
             }
             aliases = {
@@ -92,6 +101,9 @@ else:
                 "JAPAN_AI_API_KEY": "japan_ai_api_key",
                 "JAPAN_AI_BASE_URL": "japan_ai_base_url",
                 "JAPAN_AI_MODEL": "japan_ai_model",
+                "JAPAN_AI_ARTIFACT_IDS": "japan_ai_artifact_ids",
+                "JAPAN_AI_CHAT_ENDPOINT": "japan_ai_chat_endpoint",
+                "JAPAN_AI_TEMPERATURE": "japan_ai_temperature",
                 "REQUEST_TIMEOUT_SECONDS": "request_timeout_seconds",
             }
             normalized = dict(env_map)
