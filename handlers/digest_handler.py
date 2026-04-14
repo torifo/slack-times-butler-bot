@@ -1,0 +1,32 @@
+from __future__ import annotations
+
+from datetime import datetime, timedelta
+
+from services.digest_service import DigestService
+
+
+class DigestHandler:
+    def __init__(self, digest_service: DigestService):
+        self.digest_service = digest_service
+
+    def build_daily(self, base_time: datetime) -> str:
+        start_at = datetime(base_time.year, base_time.month, base_time.day)
+        end_at = start_at + timedelta(days=1)
+        digest = self.digest_service.build_digest(
+            digest_key=f"daily:{start_at.date().isoformat()}",
+            period_label=f"{start_at.date().isoformat()} daily",
+            start_at=start_at,
+            end_at=end_at,
+        )
+        return self.digest_service.format_digest(digest)
+
+    def build_weekly(self, base_time: datetime) -> str:
+        start_at = datetime(base_time.year, base_time.month, base_time.day) - timedelta(days=base_time.weekday())
+        end_at = start_at + timedelta(days=7)
+        digest = self.digest_service.build_digest(
+            digest_key=f"weekly:{start_at.date().isoformat()}",
+            period_label=f"{start_at.date().isoformat()} weekly",
+            start_at=start_at,
+            end_at=end_at,
+        )
+        return self.digest_service.format_digest(digest)
