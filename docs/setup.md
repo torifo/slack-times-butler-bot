@@ -307,6 +307,14 @@ https://xxxx.ngrok-free.app/slack/events
 
 Slack が challenge を送り、URL 検証が成功すると有効化できる。
 
+運用で path prefix を切る場合の例:
+
+```text
+https://socket.slack-bot.riumu.net/times/slack/events
+```
+
+この場合は reverse proxy で `/times/` prefix を剥がし、アプリ側の `/slack/events` に流す。
+
 ### 10.5 Subscribe to bot events に追加するもの
 
 最低限おすすめは以下。
@@ -356,9 +364,13 @@ private channel を本格的に読む場合、イベントの種類や Bot が�
 新しく Slash Command を作ると、通常以下を入れる。
 
 * Command: `/times`
-* Request URL: `https://<公開URL>/slack/commands`
+* Request URL: `https://<公開URL>/slack/commands/times`
 * Short Description: 何をするコマンドか
 * Usage Hint: 使い方
+
+path prefix を使う場合の例:
+
+* `https://socket.slack-bot.riumu.net/times/slack/commands/times`
 
 ### 11.4 最初のおすすめ
 

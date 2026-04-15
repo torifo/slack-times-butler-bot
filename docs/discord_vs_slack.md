@@ -157,6 +157,15 @@ https://bot.riumu.net/slack/commands/times
 * Web サーバーまたはリバースプロキシでアプリに流す
 * Slack にその URL を設定する
 
+1 つの受け口ドメインでパス分岐する形でもよい。
+
+例:
+
+```text
+https://socket.slack-bot.riumu.net/times/slack/events
+https://socket.slack-bot.riumu.net/times/slack/commands/times
+```
+
 ## 7. 今回の結論
 
 今回の `times-Butler` は今のコードのままなら **公開 URL 方式** が自然。

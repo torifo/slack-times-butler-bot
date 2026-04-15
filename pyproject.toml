@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "times-butler"
 version = "0.1.0"
@@ -22,3 +26,9 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+
+[tool.setuptools]
+py-modules = ["app", "dependencies", "settings"]
+
+[tool.setuptools.packages.find]
+include = ["handlers*", "jobs*", "models*", "repositories*", "routes*", "services*"]
