@@ -1,11 +1,19 @@
 from __future__ import annotations
 
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 from models.digest import DigestResult
 from repositories.digest_repository import DigestRepository
 from repositories.message_repository import MessageRepository
 from services.llm_service import LlmService
+
+
+@dataclass(slots=True)
+class DailyDigestSnapshot:
+    day_label: str
+    message_count: int
+    digest: DigestResult
 
 
 class DigestService:
@@ -29,6 +37,30 @@ class DigestService:
         self.digest_repository.save(digest_key=digest_key, digest=digest)
         return digest
 
+    def build_daily_snapshots(self, start_at: datetime, end_at: datetime) -> list[DailyDigestSnapshot]:
+        snapshots: list[DailyDigestSnapshot] = []
+        current = start_at
+        while current < end_at:
+            day_end = current + timedelta(days=1)
+            messages = self.message_repository.list_messages_between(start_at=current, end_at=day_end)
+            if messages:
+                day_label = current.date().isoformat()
+                digest = self.build_digest(
+                    digest_key=f"daily:{day_label}",
+                    period_label=f"{day_label} daily",
+                    start_at=current,
+                    end_at=day_end,
+                )
+                snapshots.append(
+                    DailyDigestSnapshot(
+                        day_label=day_label,
+                        message_count=len(messages),
+                        digest=digest,
+                    )
+                )
+            current = day_end
+        return snapshots
+
     def format_digest(self, digest: DigestResult) -> str:
         sections = [
             f"*{digest.period_label} digest*",
@@ -51,3 +83,26 @@ class DigestService:
         if digest.url_summaries:
             sections.append("共有URL:\n" + "\n".join(f"• {item}" for item in digest.url_summaries))
         return "\n".join(sections)
+
+    def format_canvas_weekly_summary(self, snapshots: list[DailyDigestSnapshot], generated_at: datetime) -> str:
+        lines = [
+            "# Weekly Daily Summary",
+            f"更新日時: {generated_at.strftime('%Y-%m-%d %H:%M')}",
+            "",
+        ]
+        for snapshot in snapshots:
+            lines.extend(
+                [
+                    f"## {snapshot.day_label}",
+                    f"- 投稿数: {snapshot.message_count} 件",
+                    f"- 要約: {snapshot.digest.summary}",
+                ]
+            )
+            if snapshot.digest.themes:
+                lines.append("- 主なテーマ: " + " / ".join(snapshot.digest.themes[:3]))
+            if snapshot.digest.learnings:
+                lines.append("- 気づき: " + " / ".join(snapshot.digest.learnings[:2]))
+            if snapshot.digest.action_candidates:
+                lines.append("- 次の一手: " + " / ".join(snapshot.digest.action_candidates[:2]))
+            lines.append("")
+        return "\n".join(lines).strip()

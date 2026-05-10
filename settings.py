@@ -27,6 +27,7 @@ if BaseSettings:
         slack_app_token: str = Field(default="", alias="SLACK_APP_TOKEN")
         source_channel: str = Field(default="", alias="SOURCE_CHANNEL")
         post_target_channel: str = Field(default="", alias="POST_TARGET_CHANNEL")
+        weekly_summary_canvas_id: str = Field(default="", alias="WEEKLY_SUMMARY_CANVAS_ID")
 
         daily_digest_cron: str = Field(default="30 18 * * *", alias="DAILY_DIGEST_CRON")
         weekly_digest_cron: str = Field(default="0 19 * * FRI", alias="WEEKLY_DIGEST_CRON")
@@ -53,6 +54,7 @@ else:
         slack_app_token: str = ""
         source_channel: str = ""
         post_target_channel: str = ""
+        weekly_summary_canvas_id: str = ""
         daily_digest_cron: str = "30 18 * * *"
         weekly_digest_cron: str = "0 19 * * FRI"
         default_explanation_level: int = 2
@@ -75,6 +77,7 @@ else:
                 "slack_app_token": os.getenv("SLACK_APP_TOKEN", ""),
                 "source_channel": os.getenv("SOURCE_CHANNEL", ""),
                 "post_target_channel": os.getenv("POST_TARGET_CHANNEL", ""),
+                "weekly_summary_canvas_id": os.getenv("WEEKLY_SUMMARY_CANVAS_ID", ""),
                 "daily_digest_cron": os.getenv("DAILY_DIGEST_CRON", "30 18 * * *"),
                 "weekly_digest_cron": os.getenv("WEEKLY_DIGEST_CRON", "0 19 * * FRI"),
                 "default_explanation_level": int(os.getenv("DEFAULT_EXPLANATION_LEVEL", "2")),
@@ -94,6 +97,7 @@ else:
                 "SLACK_APP_TOKEN": "slack_app_token",
                 "SOURCE_CHANNEL": "source_channel",
                 "POST_TARGET_CHANNEL": "post_target_channel",
+                "WEEKLY_SUMMARY_CANVAS_ID": "weekly_summary_canvas_id",
                 "DAILY_DIGEST_CRON": "daily_digest_cron",
                 "WEEKLY_DIGEST_CRON": "weekly_digest_cron",
                 "DEFAULT_EXPLANATION_LEVEL": "default_explanation_level",

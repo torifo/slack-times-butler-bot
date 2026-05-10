@@ -59,6 +59,25 @@ class SlackService:
             kwargs["thread_ts"] = thread_ts
         self.client.chat_postMessage(**kwargs)
 
+    def replace_canvas(self, canvas_id: str, markdown: str) -> None:
+        if not self.client or not canvas_id or not markdown.strip():
+            return
+        self.client.api_call(
+            "canvases.edit",
+            json={
+                "canvas_id": canvas_id,
+                "changes": [
+                    {
+                        "operation": "replace",
+                        "document_content": {
+                            "type": "markdown",
+                            "markdown": markdown,
+                        },
+                    }
+                ],
+            },
+        )
+
     def add_reaction(self, channel: str, timestamp: str, reaction: str) -> None:
         if not self.client:
             return

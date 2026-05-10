@@ -12,6 +12,7 @@ def run_weekly_digest(
     slack_service: SlackService,
     source_channel: str,
     post_channel: str,
+    canvas_id: str = "",
 ) -> str:
     current = now_jst()
     if not is_last_business_day_of_week(current.date()):
@@ -20,4 +21,7 @@ def run_weekly_digest(
         history_service.sync_history(channel=source_channel, limit=500)
     body = digest_handler.build_weekly(current)
     slack_service.post_message(channel=post_channel, text=body)
+    canvas_markdown = digest_handler.build_weekly_canvas(current)
+    if canvas_markdown:
+        slack_service.replace_canvas(canvas_id=canvas_id, markdown=canvas_markdown)
     return body

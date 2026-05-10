@@ -155,6 +155,12 @@ class ServicesTestCase(unittest.TestCase):
         self.assertTrue(digest.activity_metrics)
         self.assertTrue(digest.themes)
         self.assertTrue(digest.notable_points)
+        snapshots = service.build_daily_snapshots(
+            start_at=datetime.now(UTC) - timedelta(days=1),
+            end_at=datetime.now(UTC) + timedelta(days=1),
+        )
+        self.assertEqual(1, len(snapshots))
+        self.assertIn("投稿数: 1 件", service.format_canvas_weekly_summary(snapshots, datetime.now(UTC)))
 
     def test_llm_service_parses_japan_ai_non_stream_response(self) -> None:
         parsed = LlmService._extract_chat_message(
@@ -237,6 +243,9 @@ class ServicesTestCase(unittest.TestCase):
             def build_weekly(self, base_time: datetime) -> str:
                 return f"weekly:{base_time.date().isoformat()}"
 
+            def build_weekly_canvas(self, base_time: datetime) -> str | None:
+                return "# Weekly Daily Summary\n## 2026-05-08"
+
         class DummyHistoryService:
             def __init__(self) -> None:
                 self.calls: list[tuple[str, int]] = []
@@ -248,19 +257,31 @@ class ServicesTestCase(unittest.TestCase):
         class DummySlackService:
             def __init__(self) -> None:
                 self.posts: list[tuple[str, str]] = []
+                self.canvas_updates: list[tuple[str, str]] = []
 
             def post_message(self, channel: str, text: str, thread_ts: str | None = None) -> None:
                 self.posts.append((channel, text))
+
+            def replace_canvas(self, canvas_id: str, markdown: str) -> None:
+                self.canvas_updates.append((canvas_id, markdown))
 
         from unittest.mock import patch
 
         history_service = DummyHistoryService()
         slack_service = DummySlackService()
         with patch("jobs.weekly_digest_job.now_jst", return_value=datetime(2026, 5, 8, 19, 0)):
-            result = run_weekly_digest(DummyDigestHandler(), history_service, slack_service, "C-src", "C-post")
+            result = run_weekly_digest(
+                DummyDigestHandler(),
+                history_service,
+                slack_service,
+                "C-src",
+                "C-post",
+                "F0B2DHP5A3Z",
+            )
 
         self.assertEqual([("C-src", 500)], history_service.calls)
         self.assertEqual([("C-post", "weekly:2026-05-08")], slack_service.posts)
+        self.assertEqual([("F0B2DHP5A3Z", "# Weekly Daily Summary\n## 2026-05-08")], slack_service.canvas_updates)
         self.assertEqual("weekly:2026-05-08", result)
 
     def test_weekly_digest_skips_before_last_business_day(self) -> None:

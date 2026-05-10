@@ -61,6 +61,7 @@ def create_app() -> FastAPI:
                 "slack_service": slack_service,
                 "source_channel": settings.source_channel,
                 "post_channel": settings.post_target_channel,
+                "canvas_id": settings.weekly_summary_canvas_id,
             },
             id="weekly-digest",
             replace_existing=True,
