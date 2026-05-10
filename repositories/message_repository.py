@@ -65,14 +65,22 @@ class MessageRepository:
                     digest_key TEXT PRIMARY KEY,
                     period_label TEXT NOT NULL,
                     summary TEXT NOT NULL,
+                    activity_metrics TEXT NOT NULL DEFAULT '[]',
                     themes TEXT NOT NULL DEFAULT '[]',
+                    theme_breakdown TEXT NOT NULL DEFAULT '[]',
                     learnings TEXT NOT NULL DEFAULT '[]',
+                    momentum_signals TEXT NOT NULL DEFAULT '[]',
+                    notable_points TEXT NOT NULL DEFAULT '[]',
                     action_candidates TEXT NOT NULL DEFAULT '[]',
                     url_summaries TEXT NOT NULL DEFAULT '[]',
                     created_at TEXT NOT NULL
                 );
                 """
             )
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(digests)").fetchall()}
+            for name in ("activity_metrics", "theme_breakdown", "momentum_signals", "notable_points"):
+                if name not in columns:
+                    connection.execute(f"ALTER TABLE digests ADD COLUMN {name} TEXT NOT NULL DEFAULT '[]'")
 
     def upsert_message(self, message: MessageRecord) -> None:
         with self.connect() as connection:

@@ -84,8 +84,12 @@ class LlmService:
         return DigestResult(
             period_label=period_label,
             summary=parsed.get("summary", f"{period_label} の投稿をまとめました。"),
+            activity_metrics=self._split_list_field(parsed.get("activity_metrics", ""))[:5],
             themes=self._split_list_field(parsed.get("themes", ""))[:5],
+            theme_breakdown=self._split_list_field(parsed.get("theme_breakdown", ""))[:5],
             learnings=self._split_list_field(parsed.get("learnings", ""))[:5],
+            momentum_signals=self._split_list_field(parsed.get("momentum_signals", ""))[:5],
+            notable_points=self._split_list_field(parsed.get("notable_points", ""))[:5],
             action_candidates=self._split_list_field(parsed.get("action_candidates", ""))[:5],
             url_summaries=self._split_list_field(parsed.get("url_summaries", ""))[:5],
         )
@@ -131,14 +135,18 @@ class LlmService:
             "prompt": (
                 "次の投稿群から digest を作成してください。\n"
                 "JSONではなく、次のキーを含むプレーンテキストで返してください。\n"
-                "summary:\nthemes:\nlearnings:\naction_candidates:\nurl_summaries:\n"
-                "themes, learnings, action_candidates, url_summaries は 1 行 1 項目で、先頭に '- ' を付けてください。\n"
+                "summary:\nactivity_metrics:\nthemes:\ntheme_breakdown:\nlearnings:\nmomentum_signals:\nnotable_points:\naction_candidates:\nurl_summaries:\n"
+                "summary には投稿数を必ず含めてください。\n"
+                "activity_metrics, themes, theme_breakdown, learnings, momentum_signals, notable_points, action_candidates, url_summaries は 1 行 1 項目で、先頭に '- ' を付けてください。\n"
+                "theme_breakdown ではテーマごとの濃淡や偏りが伝わるようにしてください。\n"
+                "momentum_signals では前半後半の変化、繰り返し、停滞や前進を捉えてください。\n"
+                "notable_points では印象的な投稿や対比を短く言語化してください。\n"
                 f"対象期間: {period_label}\n"
                 f"投稿一覧:\n{message_block}"
             ),
             "systemPrompt": (
                 "あなたは Slack times の digest 編集者です。"
-                "日本語で簡潔に、Slack 投稿向けの要点だけを返してください。"
+                "日本語で簡潔に、ただし観測・分析・示唆を分けて返してください。"
             ),
             "artifactIds": self._artifact_ids(),
             "model": self.settings.japan_ai_model,
@@ -212,21 +220,68 @@ class LlmService:
 
     def _fallback_digest(self, period_label: str, messages: list[MessageRecord]) -> DigestResult:
         texts = [message.text for message in messages]
-        keywords = top_keywords(texts, limit=5)
+        keywords = top_keywords(texts, limit=8)
         url_counter = Counter(url for message in messages for url in message.extracted_urls)
+        user_counter = Counter(message.user_id for message in messages)
+        tag_counter = Counter(tag for message in messages for tag in message.tags)
+        hour_buckets = Counter(self._hour_bucket(message.created_at.hour) for message in messages)
+        daily_counter = Counter(message.created_at.date().isoformat() for message in messages)
 
-        themes = [f"{keyword} が複数回登場" for keyword in keywords[:3]]
-        learnings = [message.text[:60] for message in messages if message.kidzuki_flag][:3]
+        themes = [f"{keyword} を中心に会話が展開" for keyword in keywords[:4]]
+        learnings = [self._compact_text(message.text, 70) for message in messages if message.kidzuki_flag][:4]
         if not learnings and messages:
-            learnings = [messages[-1].text[:60]]
-        action_candidates = [f"{keyword} に関するメモを整理する" for keyword in keywords[:2]]
+            learnings = [self._compact_text(messages[-1].text, 70)]
+        activity_metrics = [
+            f"投稿数 {len(messages)} 件",
+            f"投稿者 {len(user_counter)} 人",
+            f"URL共有 {sum(1 for message in messages if message.has_url)} 件",
+            f"気づき判定 {sum(1 for message in messages if message.kidzuki_flag)} 件",
+        ]
+        if hour_buckets:
+            bucket, count = hour_buckets.most_common(1)[0]
+            activity_metrics.append(f"発話が多い時間帯 {bucket} ({count} 件)")
+        theme_breakdown = [f"{tag} {count} 件" for tag, count in tag_counter.most_common(4)]
+        if not theme_breakdown:
+            theme_breakdown = [f"{keyword} 周辺の投稿が目立つ" for keyword in keywords[:3]]
+        momentum_signals: list[str] = []
+        if daily_counter:
+            first_day, first_count = sorted(daily_counter.items())[0]
+            last_day, last_count = sorted(daily_counter.items())[-1]
+            momentum_signals.append(f"序盤 {first_day} は {first_count} 件、終盤 {last_day} は {last_count} 件")
+        if len(keywords) >= 2:
+            momentum_signals.append(f"{keywords[0]} から {keywords[1]} へ話題が接続")
+        if hour_buckets:
+            momentum_signals.append("主な稼働帯は " + " / ".join(f"{bucket}:{count}" for bucket, count in hour_buckets.most_common(3)))
+        notable_points = [self._compact_text(message.text, 80) for message in messages[-3:]]
+        action_candidates = [f"{keyword} に関するメモを整理する" for keyword in keywords[:3]]
+        if tag_counter:
+            action_candidates.append(f"{tag_counter.most_common(1)[0][0]} の内容を週次で棚卸しする")
         url_summaries = [f"{url} が {count} 回共有" for url, count in url_counter.most_common(3)]
         summary = f"{period_label} の投稿 {len(messages)} 件から主要トピックを整理しました。"
         return DigestResult(
             period_label=period_label,
             summary=summary,
+            activity_metrics=activity_metrics,
             themes=themes,
+            theme_breakdown=theme_breakdown,
             learnings=learnings,
+            momentum_signals=momentum_signals[:4],
+            notable_points=notable_points,
             action_candidates=action_candidates,
             url_summaries=url_summaries,
         )
+
+    @staticmethod
+    def _hour_bucket(hour: int) -> str:
+        if 5 <= hour < 12:
+            return "朝"
+        if 12 <= hour < 18:
+            return "昼"
+        if 18 <= hour < 24:
+            return "夜"
+        return "深夜"
+
+    @staticmethod
+    def _compact_text(text: str, limit: int) -> str:
+        normalized = " ".join(text.split())
+        return normalized[:limit] + ("…" if len(normalized) > limit else "")

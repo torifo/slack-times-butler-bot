@@ -1,20 +1,24 @@
 from __future__ import annotations
 
 import unittest
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from handlers.tag_handler import TagHandler
+from jobs.daily_digest_job import run_daily_digest
+from jobs.weekly_digest_job import run_weekly_digest
 from models.message import MessageRecord
 from repositories.digest_repository import DigestRepository
 from repositories.message_repository import MessageRepository
 from repositories.tag_repository import TagRepository
 from repositories.url_summary_repository import UrlSummaryRepository
+from services.business_calendar import is_business_day, is_last_business_day_of_week
 from services.digest_service import DigestService
 from services.kidzuki_service import KidzukiService
 from services.llm_service import LlmService
 from services.search_service import SearchService
+from services.slack_service import SlackService
 from services.tag_service import TagService
 from services.url_summary_service import UrlSummaryService
 from settings import Settings
@@ -148,7 +152,9 @@ class ServicesTestCase(unittest.TestCase):
         )
 
         self.assertIn("投稿 1 件", digest.summary)
+        self.assertTrue(digest.activity_metrics)
         self.assertTrue(digest.themes)
+        self.assertTrue(digest.notable_points)
 
     def test_llm_service_parses_japan_ai_non_stream_response(self) -> None:
         parsed = LlmService._extract_chat_message(
@@ -156,8 +162,12 @@ class ServicesTestCase(unittest.TestCase):
                 "status": "succeeded",
                 "sessionId": "abc123",
                 "chatMessage": "summary: 要約\n"
+                "activity_metrics:\n- 投稿数 12 件\n"
                 "themes:\n- API\n- Slack\n"
+                "theme_breakdown:\n- 技術 60%\n"
                 "learnings:\n- 学び1\n"
+                "momentum_signals:\n- 前半は調査、後半は実装\n"
+                "notable_points:\n- API 設計の迷いが見えた\n"
                 "action_candidates:\n- 行動1\n"
                 "url_summaries:\n- https://example.com",
                 "references": [],
@@ -165,7 +175,7 @@ class ServicesTestCase(unittest.TestCase):
         )
 
         self.assertEqual(
-            "summary: 要約\nthemes:\n- API\n- Slack\nlearnings:\n- 学び1\naction_candidates:\n- 行動1\nurl_summaries:\n- https://example.com",
+            "summary: 要約\nactivity_metrics:\n- 投稿数 12 件\nthemes:\n- API\n- Slack\ntheme_breakdown:\n- 技術 60%\nlearnings:\n- 学び1\nmomentum_signals:\n- 前半は調査、後半は実装\nnotable_points:\n- API 設計の迷いが見えた\naction_candidates:\n- 行動1\nurl_summaries:\n- https://example.com",
             parsed,
         )
 
@@ -174,6 +184,104 @@ class ServicesTestCase(unittest.TestCase):
             {"status": "failed", "errorMessage": "model not found", "references": []}
         )
         self.assertIsNone(parsed)
+
+    def test_business_calendar_skips_weekend_and_holiday(self) -> None:
+        self.assertFalse(is_business_day(date(2026, 5, 10)))
+        self.assertFalse(is_business_day(date(2026, 5, 6)))
+        self.assertTrue(is_business_day(date(2026, 5, 7)))
+        self.assertTrue(is_last_business_day_of_week(date(2026, 5, 8)))
+        self.assertFalse(is_last_business_day_of_week(date(2026, 5, 7)))
+        self.assertTrue(is_last_business_day_of_week(date(2026, 5, 1)))
+        self.assertTrue(is_last_business_day_of_week(date(2026, 12, 31)))
+        self.assertFalse(is_last_business_day_of_week(date(2027, 1, 1)))
+        self.assertTrue(is_last_business_day_of_week(date(2026, 9, 18)))
+        self.assertFalse(is_last_business_day_of_week(date(2026, 9, 21)))
+        self.assertFalse(is_last_business_day_of_week(date(2026, 9, 22)))
+        self.assertFalse(is_last_business_day_of_week(date(2026, 9, 23)))
+        self.assertFalse(is_last_business_day_of_week(date(2026, 9, 24)))
+        self.assertTrue(is_last_business_day_of_week(date(2026, 9, 25)))
+
+    def test_slack_service_resolves_channel_id_from_multiple_shapes(self) -> None:
+        self.assertEqual("C123", SlackService.resolve_channel_id({"channel": "C123"}))
+        self.assertEqual("C234", SlackService.resolve_channel_id({"channel": {"id": "C234"}}))
+        self.assertEqual("C345", SlackService.resolve_channel_id({"item": {"channel": "C345"}}))
+        self.assertEqual(
+            "C567",
+            SlackService.resolve_channel_id({"authorizations": [{"channel_id": "C567"}]}),
+        )
+        self.assertEqual("C456", SlackService.resolve_channel_id({}, fallback="C456"))
+
+    def test_daily_digest_skips_holiday_without_posting(self) -> None:
+        class DummyDigestHandler:
+            def build_daily(self, base_time: datetime) -> str:
+                raise AssertionError("build_daily should not be called on a holiday")
+
+        class DummySlackService:
+            def __init__(self) -> None:
+                self.called = False
+
+            def post_message(self, channel: str, text: str, thread_ts: str | None = None) -> None:
+                self.called = True
+
+        from unittest.mock import patch
+
+        slack_service = DummySlackService()
+        with patch("jobs.daily_digest_job.now_jst", return_value=datetime(2026, 5, 6, 9, 0)):
+            result = run_daily_digest(DummyDigestHandler(), object(), slack_service, "C-src", "C1")
+
+        self.assertIn("skip daily digest on holiday", result)
+        self.assertFalse(slack_service.called)
+
+    def test_weekly_digest_syncs_and_posts_on_last_business_day(self) -> None:
+        class DummyDigestHandler:
+            def build_weekly(self, base_time: datetime) -> str:
+                return f"weekly:{base_time.date().isoformat()}"
+
+        class DummyHistoryService:
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, int]] = []
+
+            def sync_history(self, channel: str, limit: int = 200) -> int:
+                self.calls.append((channel, limit))
+                return 3
+
+        class DummySlackService:
+            def __init__(self) -> None:
+                self.posts: list[tuple[str, str]] = []
+
+            def post_message(self, channel: str, text: str, thread_ts: str | None = None) -> None:
+                self.posts.append((channel, text))
+
+        from unittest.mock import patch
+
+        history_service = DummyHistoryService()
+        slack_service = DummySlackService()
+        with patch("jobs.weekly_digest_job.now_jst", return_value=datetime(2026, 5, 8, 19, 0)):
+            result = run_weekly_digest(DummyDigestHandler(), history_service, slack_service, "C-src", "C-post")
+
+        self.assertEqual([("C-src", 500)], history_service.calls)
+        self.assertEqual([("C-post", "weekly:2026-05-08")], slack_service.posts)
+        self.assertEqual("weekly:2026-05-08", result)
+
+    def test_weekly_digest_skips_before_last_business_day(self) -> None:
+        class DummyDigestHandler:
+            def build_weekly(self, base_time: datetime) -> str:
+                raise AssertionError("build_weekly should not run before the last business day")
+
+        class DummyHistoryService:
+            def sync_history(self, channel: str, limit: int = 200) -> int:
+                raise AssertionError("sync_history should not run before the last business day")
+
+        class DummySlackService:
+            def post_message(self, channel: str, text: str, thread_ts: str | None = None) -> None:
+                raise AssertionError("post_message should not run before the last business day")
+
+        from unittest.mock import patch
+
+        with patch("jobs.weekly_digest_job.now_jst", return_value=datetime(2026, 5, 7, 19, 0)):
+            result = run_weekly_digest(DummyDigestHandler(), DummyHistoryService(), DummySlackService(), "C-src", "C-post")
+
+        self.assertIn("skip weekly digest before last business day", result)
 
 
 if __name__ == "__main__":

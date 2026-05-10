@@ -34,12 +34,20 @@ class DigestService:
             f"*{digest.period_label} digest*",
             digest.summary,
         ]
+        if digest.activity_metrics:
+            sections.append("活動サマリ:\n" + "\n".join(f"• {item}" for item in digest.activity_metrics))
         if digest.themes:
-            sections.append("主なテーマ: " + " / ".join(digest.themes))
+            sections.append("主なテーマ:\n" + "\n".join(f"• {item}" for item in digest.themes))
+        if digest.theme_breakdown:
+            sections.append("テーマ配分:\n" + "\n".join(f"• {item}" for item in digest.theme_breakdown))
         if digest.learnings:
-            sections.append("気づき: " + " / ".join(digest.learnings))
+            sections.append("気づき:\n" + "\n".join(f"• {item}" for item in digest.learnings))
+        if digest.momentum_signals:
+            sections.append("流れの変化:\n" + "\n".join(f"• {item}" for item in digest.momentum_signals))
+        if digest.notable_points:
+            sections.append("印象的な論点:\n" + "\n".join(f"• {item}" for item in digest.notable_points))
         if digest.action_candidates:
-            sections.append("アクション候補: " + " / ".join(digest.action_candidates))
+            sections.append("アクション候補:\n" + "\n".join(f"• {item}" for item in digest.action_candidates))
         if digest.url_summaries:
-            sections.append("共有URL: " + " / ".join(digest.url_summaries))
+            sections.append("共有URL:\n" + "\n".join(f"• {item}" for item in digest.url_summaries))
         return "\n".join(sections)

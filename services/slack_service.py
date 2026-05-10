@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import logging
 from typing import Any
 
 try:
@@ -26,6 +27,8 @@ class SlackHistoryItem:
 
 
 class SlackService:
+    logger = logging.getLogger(__name__)
+
     def __init__(self, bot_token: str):
         self.client = WebClient(token=bot_token) if (WebClient and bot_token) else None
 
@@ -68,3 +71,40 @@ class SlackService:
     @staticmethod
     def unix_ts_to_datetime(ts: str) -> datetime:
         return datetime.fromtimestamp(float(ts), tz=timezone.utc)
+
+    @classmethod
+    def resolve_channel_id(cls, event: dict[str, Any], fallback: str = "") -> str:
+        candidates: list[str] = []
+
+        for value in (
+            event.get("channel"),
+            event.get("channel_id"),
+            event.get("item", {}).get("channel") if isinstance(event.get("item"), dict) else None,
+            event.get("authorizations", [{}])[0].get("channel_id")
+            if isinstance(event.get("authorizations"), list) and event.get("authorizations")
+            else None,
+        ):
+            if isinstance(value, str) and value:
+                candidates.append(value)
+            elif isinstance(value, dict):
+                channel_id = value.get("id")
+                if isinstance(channel_id, str) and channel_id:
+                    candidates.append(channel_id)
+
+        if candidates:
+            return candidates[0]
+
+        if fallback:
+            cls.logger.warning(
+                "Slack event missing channel id; using fallback source channel. event_type=%s keys=%s",
+                event.get("type"),
+                sorted(event.keys()),
+            )
+            return fallback
+
+        cls.logger.warning(
+            "Slack event missing channel id and no fallback is configured. event_type=%s keys=%s",
+            event.get("type"),
+            sorted(event.keys()),
+        )
+        return ""

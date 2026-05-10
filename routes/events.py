@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from dependencies import (
+    get_history_service,
     get_reaction_service,
     get_settings,
     get_slack_service,
@@ -17,6 +20,7 @@ from handlers.url_handler import UrlHandler
 from handlers.welcome_handler import WelcomeHandler
 
 router = APIRouter(prefix="/slack")
+logger = logging.getLogger(__name__)
 
 
 class SlackEnvelope(BaseModel):
@@ -41,9 +45,13 @@ def handle_events(payload: SlackEnvelope) -> dict[str, str]:
             tag_service=get_tag_service(),
             tag_repository=get_tag_repository(),
         )
-        channel = event.get("channel") or get_settings().source_channel
+        channel = get_slack_service().resolve_channel_id(event, fallback=get_settings().source_channel)
         message_ts = event.get("ts", "")
         text = event.get("text", "")
+        if not channel:
+            logger.warning("Skipping message event because channel id could not be resolved. ts=%s", message_ts)
+            return {"status": "accepted"}
+        get_history_service().ingest_event_message(channel=channel, payload=event)
         if event.get("thread_ts") and text.lower().startswith("tag:"):
             tag_handler.apply_instruction(message_ts=event["thread_ts"], text=text)
         else:
@@ -61,7 +69,7 @@ def handle_events(payload: SlackEnvelope) -> dict[str, str]:
             slack_service=get_slack_service(),
             welcome_service=get_welcome_service(),
         ).handle_member_joined(
-            channel=event.get("channel", get_settings().post_target_channel),
+            channel=get_slack_service().resolve_channel_id(event, fallback=get_settings().post_target_channel),
             user_id=event.get("user", ""),
         )
 
