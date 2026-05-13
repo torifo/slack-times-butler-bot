@@ -10,7 +10,7 @@ class DigestHandler:
         self.digest_service = digest_service
 
     def build_daily(self, base_time: datetime) -> str:
-        start_at = datetime(base_time.year, base_time.month, base_time.day)
+        start_at = base_time.replace(hour=0, minute=0, second=0, microsecond=0)
         end_at = start_at + timedelta(days=1)
         digest = self.digest_service.build_digest(
             digest_key=f"daily:{start_at.date().isoformat()}",
@@ -21,7 +21,7 @@ class DigestHandler:
         return self.digest_service.format_digest(digest)
 
     def build_weekly(self, base_time: datetime) -> str:
-        start_at = datetime(base_time.year, base_time.month, base_time.day) - timedelta(days=base_time.weekday())
+        start_at = base_time.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=base_time.weekday())
         end_at = start_at + timedelta(days=7)
         digest = self.digest_service.build_digest(
             digest_key=f"weekly:{start_at.date().isoformat()}",
@@ -32,7 +32,7 @@ class DigestHandler:
         return self.digest_service.format_digest(digest)
 
     def build_weekly_canvas(self, base_time: datetime) -> str | None:
-        start_at = datetime(base_time.year, base_time.month, base_time.day) - timedelta(days=base_time.weekday())
+        start_at = base_time.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=base_time.weekday())
         end_at = start_at + timedelta(days=7)
         snapshots = self.digest_service.build_daily_snapshots(start_at=start_at, end_at=end_at)
         if not snapshots:

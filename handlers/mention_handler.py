@@ -4,6 +4,7 @@ from datetime import datetime
 
 from handlers.digest_handler import DigestHandler
 from handlers.search_handler import SearchHandler
+from services.business_calendar import now_jst
 
 
 class MentionHandler:
@@ -12,7 +13,7 @@ class MentionHandler:
         self.search_handler = search_handler
 
     def handle(self, text: str, now: datetime | None = None) -> str:
-        now = now or datetime.utcnow()
+        now = now or now_jst()
         lowered = text.lower()
         if "今日" in text or "daily" in lowered:
             return self.digest_handler.build_daily(now)

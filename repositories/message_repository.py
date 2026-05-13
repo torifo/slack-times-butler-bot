@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
@@ -83,6 +83,7 @@ class MessageRepository:
                     connection.execute(f"ALTER TABLE digests ADD COLUMN {name} TEXT NOT NULL DEFAULT '[]'")
 
     def upsert_message(self, message: MessageRecord) -> None:
+        created_at = self._normalize_datetime(message.created_at)
         with self.connect() as connection:
             connection.execute(
                 """
@@ -113,7 +114,7 @@ class MessageRepository:
                     message.permalink,
                     int(message.has_url),
                     json.dumps(message.extracted_urls, ensure_ascii=False),
-                    message.created_at.isoformat(),
+                    created_at.isoformat(),
                     int(message.kidzuki_flag),
                 ),
             )
@@ -125,6 +126,8 @@ class MessageRepository:
                 )
 
     def list_messages_between(self, start_at: datetime, end_at: datetime) -> list[MessageRecord]:
+        start_at = self._normalize_datetime(start_at)
+        end_at = self._normalize_datetime(end_at)
         with self.connect() as connection:
             rows = connection.execute(
                 """
@@ -175,10 +178,12 @@ class MessageRepository:
             params.append(int(has_url))
 
         if start_date:
+            start_date = self._normalize_datetime(start_date)
             clauses.append("created_at >= ?")
             params.append(start_date.isoformat())
 
         if end_date:
+            end_date = self._normalize_datetime(end_date)
             clauses.append("created_at < ?")
             params.append(end_date.isoformat())
 
@@ -216,3 +221,9 @@ class MessageRepository:
             tags=sorted(set(raw_tags)),
             kidzuki_flag=bool(row["kidzuki_flag"]),
         )
+
+    @staticmethod
+    def _normalize_datetime(value: datetime) -> datetime:
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
