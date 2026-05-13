@@ -62,6 +62,8 @@ class DigestService:
         return snapshots
 
     def format_digest(self, digest: DigestResult) -> str:
+        if digest.summary.startswith("*#"):
+            return digest.summary
         sections = [
             f"*{digest.period_label} digest*",
             digest.summary,

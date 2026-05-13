@@ -80,18 +80,9 @@ class LlmService:
         content = self._extract_chat_message(data)
         if not content:
             return None
-        parsed = self._parse_key_value_block(content)
         return DigestResult(
             period_label=period_label,
-            summary=parsed.get("summary", f"{period_label} の投稿をまとめました。"),
-            activity_metrics=self._split_list_field(parsed.get("activity_metrics", ""))[:5],
-            themes=self._split_list_field(parsed.get("themes", ""))[:5],
-            theme_breakdown=self._split_list_field(parsed.get("theme_breakdown", ""))[:5],
-            learnings=self._split_list_field(parsed.get("learnings", ""))[:5],
-            momentum_signals=self._split_list_field(parsed.get("momentum_signals", ""))[:5],
-            notable_points=self._split_list_field(parsed.get("notable_points", ""))[:5],
-            action_candidates=self._split_list_field(parsed.get("action_candidates", ""))[:5],
-            url_summaries=self._split_list_field(parsed.get("url_summaries", ""))[:5],
+            summary=content,
         )
 
     def _headers(self) -> dict[str, str]:
@@ -131,22 +122,44 @@ class LlmService:
 
     def _build_digest_prompt(self, period_label: str, messages: list[MessageRecord]) -> dict[str, object]:
         message_block = "\n".join(f"- {message.text}" for message in messages) or "- 投稿なし"
+        channel_name = self.settings.source_channel
+        date = period_label.split()[0] if period_label else period_label
         return {
             "prompt": (
-                "次の投稿群から digest を作成してください。\n"
-                "JSONではなく、次のキーを含むプレーンテキストで返してください。\n"
-                "summary:\nactivity_metrics:\nthemes:\ntheme_breakdown:\nlearnings:\nmomentum_signals:\nnotable_points:\naction_candidates:\nurl_summaries:\n"
-                "summary には投稿数を必ず含めてください。\n"
-                "activity_metrics, themes, theme_breakdown, learnings, momentum_signals, notable_points, action_candidates, url_summaries は 1 行 1 項目で、先頭に '- ' を付けてください。\n"
-                "theme_breakdown ではテーマごとの濃淡や偏りが伝わるようにしてください。\n"
-                "momentum_signals では前半後半の変化、繰り返し、停滞や前進を捉えてください。\n"
-                "notable_points では印象的な投稿や対比を短く言語化してください。\n"
-                f"対象期間: {period_label}\n"
-                f"投稿一覧:\n{message_block}"
+                f"以下は、Slackチャンネル「{channel_name}」の {date} のメッセージ一覧です。\n"
+                "\n"
+                "---\n"
+                f"{message_block}\n"
+                "---\n"
+                "このチャンネルの内容を**人間が読んで役立つ日報サマリー**として3〜5箇条でまとめてください。\n"
+                "\n"
+                "## 守るべきルール\n"
+                "\n"
+                "**やること:**\n"
+                "- 実際に起きた出来事・話題・気づきを自然な日本語でまとめる\n"
+                "- 誰が何をしたか、何が話題になったか、印象的な発言を中心に書く\n"
+                "- 複数の投稿が同じ話題なら1つにまとめる\n"
+                "- 箇条書きは「— 」始まりで統一する\n"
+                "\n"
+                "**やってはいけないこと:**\n"
+                "- 投稿数・投稿者数・時間帯などの統計情報を出さない\n"
+                "- 「〜について会話が展開」「〜周辺の投稿が目立つ」のような機械的な表現を使わない\n"
+                "- 「〜に関するメモを整理する」のような無意味なアクション候補を出さない\n"
+                "- テキストの断片をそのままテーマとして抜き出さない\n"
+                "- 分析レポート形式（テーマ配分・流れの変化・気づき判定 等）にしない\n"
+                "\n"
+                "## 出力形式（厳守）\n"
+                "\n"
+                f"*#{channel_name}*\n"
+                "— [具体的な出来事や話題を1文で]\n"
+                "— [具体的な出来事や話題を1文で]\n"
+                "...（最大5件）\n"
+                "\n"
+                "活動がない場合は「本日は投稿がありませんでした」と記載する。"
             ),
             "systemPrompt": (
                 "あなたは Slack times の digest 編集者です。"
-                "日本語で簡潔に、ただし観測・分析・示唆を分けて返してください。"
+                "日本語で簡潔に返してください。"
             ),
             "artifactIds": self._artifact_ids(),
             "model": self.settings.japan_ai_model,
