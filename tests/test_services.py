@@ -6,6 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from handlers.tag_handler import TagHandler
+from handlers.digest_handler import DigestHandler
 from jobs.daily_digest_job import run_daily_digest
 from jobs.weekly_digest_job import run_weekly_digest
 from models.message import MessageRecord
@@ -22,6 +23,7 @@ from services.slack_service import SlackService
 from services.tag_service import TagService
 from services.url_summary_service import UrlSummaryService
 from settings import Settings
+from zoneinfo import ZoneInfo
 
 
 def seed_message(repository: MessageRepository, message: MessageRecord) -> None:
@@ -83,6 +85,47 @@ class ServicesTestCase(unittest.TestCase):
 
         self.assertEqual(1, len(results))
         self.assertEqual("1.0", results[0].message_ts)
+
+    def test_search_service_can_collect_may_business_day_messages(self) -> None:
+        repository = MessageRepository(self.database_path)
+        for message_ts, text, created_at in (
+            ("1.0", "5月1日の平日データ", datetime(2026, 5, 1, 9, 0, tzinfo=UTC)),
+            ("2.0", "5月3日の休日データ", datetime(2026, 5, 3, 9, 0, tzinfo=UTC)),
+            ("3.0", "5月6日の祝日データ", datetime(2026, 5, 6, 9, 0, tzinfo=UTC)),
+            ("4.0", "5月7日の平日データ", datetime(2026, 5, 7, 9, 0, tzinfo=UTC)),
+            ("5.0", "6月1日の月跨ぎデータ", datetime(2026, 6, 1, 9, 0, tzinfo=UTC)),
+        ):
+            seed_message(
+                repository,
+                MessageRecord(
+                    message_ts=message_ts,
+                    thread_ts=None,
+                    channel_id="C1",
+                    user_id="U1",
+                    text=text,
+                    normalized_text=text,
+                    permalink=f"https://example.com/{message_ts}",
+                    has_url=False,
+                    extracted_urls=[],
+                    created_at=created_at,
+                    tags=[],
+                    kidzuki_flag=False,
+                ),
+            )
+
+        service = SearchService(repository)
+        may_results = service.search(
+            query="",
+            start_date=datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
+            end_date=datetime(2026, 6, 1, 0, 0, tzinfo=UTC),
+            limit=10,
+        )
+
+        may_business_day_results = [
+            message for message in may_results if is_business_day(message.created_at.astimezone(ZoneInfo("Asia/Tokyo")).date())
+        ]
+
+        self.assertEqual(["4.0", "1.0"], [message.message_ts for message in may_business_day_results])
 
     def test_tag_handler_applies_thread_instruction(self) -> None:
         repository = MessageRepository(self.database_path)
@@ -161,6 +204,79 @@ class ServicesTestCase(unittest.TestCase):
         )
         self.assertEqual(1, len(snapshots))
         self.assertIn("投稿数: 1 件", service.format_canvas_weekly_summary(snapshots, datetime.now(UTC)))
+
+    def test_daily_digest_uses_jst_day_boundary(self) -> None:
+        settings = self.make_settings()
+        message_repository = MessageRepository(settings.database_path)
+        digest_repository = DigestRepository(settings.database_path)
+        message_repository.initialize()
+        digest_repository.initialize()
+        message_repository.upsert_message(
+            MessageRecord(
+                message_ts="1.0",
+                thread_ts=None,
+                channel_id="C1",
+                user_id="U1",
+                text="朝の投稿",
+                normalized_text="朝の投稿",
+                permalink="https://example.com/1",
+                has_url=False,
+                extracted_urls=[],
+                created_at=datetime(2026, 5, 10, 23, 30, tzinfo=UTC),
+                tags=[],
+                kidzuki_flag=False,
+            )
+        )
+        service = DigestService(message_repository, digest_repository, LlmService(settings))
+        handler = DigestHandler(service)
+
+        body = handler.build_daily(datetime(2026, 5, 11, 18, 30, tzinfo=ZoneInfo("Asia/Tokyo")))
+
+        self.assertIn("投稿数 1 件", body)
+
+    def test_open_digest_is_rebuilt_instead_of_returning_stale_cache(self) -> None:
+        settings = self.make_settings()
+        message_repository = MessageRepository(settings.database_path)
+        digest_repository = DigestRepository(settings.database_path)
+        message_repository.initialize()
+        digest_repository.initialize()
+        service = DigestService(message_repository, digest_repository, LlmService(settings))
+
+        start_at = datetime.now(UTC) - timedelta(hours=1)
+        end_at = datetime.now(UTC) + timedelta(hours=1)
+        first = service.build_digest(
+            digest_key="daily:open",
+            period_label="open daily",
+            start_at=start_at,
+            end_at=end_at,
+        )
+        self.assertIn("投稿 0 件", first.summary)
+
+        message_repository.upsert_message(
+            MessageRecord(
+                message_ts="1.0",
+                thread_ts=None,
+                channel_id="C1",
+                user_id="U1",
+                text="途中で増えた投稿",
+                normalized_text="途中で増えた投稿",
+                permalink="https://example.com/1",
+                has_url=False,
+                extracted_urls=[],
+                created_at=datetime.now(UTC),
+                tags=[],
+                kidzuki_flag=False,
+            )
+        )
+
+        second = service.build_digest(
+            digest_key="daily:open",
+            period_label="open daily",
+            start_at=start_at,
+            end_at=end_at,
+        )
+
+        self.assertIn("投稿 1 件", second.summary)
 
     def test_llm_service_parses_japan_ai_non_stream_response(self) -> None:
         parsed = LlmService._extract_chat_message(
