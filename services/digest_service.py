@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from models.digest import DigestResult
 from repositories.digest_repository import DigestRepository
@@ -29,7 +29,7 @@ class DigestService:
 
     def build_digest(self, digest_key: str, period_label: str, start_at: datetime, end_at: datetime) -> DigestResult:
         cached = self.digest_repository.get(digest_key)
-        if cached:
+        if cached and self._is_closed_period(end_at):
             return cached
 
         messages = self.message_repository.list_messages_between(start_at=start_at, end_at=end_at)
@@ -106,3 +106,9 @@ class DigestService:
                 lines.append("- 次の一手: " + " / ".join(snapshot.digest.action_candidates[:2]))
             lines.append("")
         return "\n".join(lines).strip()
+
+    @staticmethod
+    def _is_closed_period(end_at: datetime) -> bool:
+        if end_at.tzinfo is None:
+            return end_at <= datetime.now(UTC).replace(tzinfo=None)
+        return end_at <= datetime.now(tz=end_at.tzinfo)
