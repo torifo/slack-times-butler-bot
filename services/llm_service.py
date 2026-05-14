@@ -184,7 +184,7 @@ class LlmService:
                 "\n"
                 "## 出力形式（厳守）\n"
                 "\n"
-                f"*#{channel_name}*\n"
+                f"*{date} daily digest(#{channel_name})*\n"
                 "— [具体的な出来事や話題を1文で]\n"
                 "— [具体的な出来事や話題を1文で]\n"
                 "...（最大5件）\n"
