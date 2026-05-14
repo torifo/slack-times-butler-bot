@@ -26,6 +26,7 @@ if BaseSettings:
         slack_bot_token: str = Field(default="", alias="SLACK_BOT_TOKEN")
         slack_app_token: str = Field(default="", alias="SLACK_APP_TOKEN")
         source_channel: str = Field(default="", alias="SOURCE_CHANNEL")
+        source_channel_name: str = Field(default="", alias="SOURCE_CHANNEL_NAME")
         post_target_channel: str = Field(default="", alias="POST_TARGET_CHANNEL")
         weekly_summary_canvas_id: str = Field(default="", alias="WEEKLY_SUMMARY_CANVAS_ID")
 
@@ -54,6 +55,7 @@ else:
         slack_bot_token: str = ""
         slack_app_token: str = ""
         source_channel: str = ""
+        source_channel_name: str = ""
         post_target_channel: str = ""
         weekly_summary_canvas_id: str = ""
         daily_digest_cron: str = "30 18 * * *"
@@ -78,6 +80,7 @@ else:
                 "slack_bot_token": os.getenv("SLACK_BOT_TOKEN", ""),
                 "slack_app_token": os.getenv("SLACK_APP_TOKEN", ""),
                 "source_channel": os.getenv("SOURCE_CHANNEL", ""),
+                "source_channel_name": os.getenv("SOURCE_CHANNEL_NAME", ""),
                 "post_target_channel": os.getenv("POST_TARGET_CHANNEL", ""),
                 "weekly_summary_canvas_id": os.getenv("WEEKLY_SUMMARY_CANVAS_ID", ""),
                 "daily_digest_cron": os.getenv("DAILY_DIGEST_CRON", "30 18 * * *"),
@@ -99,6 +102,7 @@ else:
                 "SLACK_BOT_TOKEN": "slack_bot_token",
                 "SLACK_APP_TOKEN": "slack_app_token",
                 "SOURCE_CHANNEL": "source_channel",
+                "SOURCE_CHANNEL_NAME": "source_channel_name",
                 "POST_TARGET_CHANNEL": "post_target_channel",
                 "WEEKLY_SUMMARY_CANVAS_ID": "weekly_summary_canvas_id",
                 "DAILY_DIGEST_CRON": "daily_digest_cron",

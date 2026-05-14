@@ -123,7 +123,7 @@ class LlmService:
 
     def _build_digest_prompt(self, period_label: str, messages: list[MessageRecord]) -> dict[str, object]:
         message_block = "\n".join(f"- {message.text}" for message in messages) or "- 投稿なし"
-        channel_name = self.settings.source_channel
+        channel_name = self.settings.source_channel_name or self.settings.source_channel
         date = period_label.split()[0] if period_label else period_label
         return {
             "prompt": (
