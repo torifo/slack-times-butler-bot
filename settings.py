@@ -35,6 +35,7 @@ if BaseSettings:
         url_reaction_name: str = Field(default="eyes", alias="URL_REACTION_NAME")
 
         japan_ai_api_key: str = Field(default="", alias="JAPAN_AI_API_KEY")
+        japan_ai_user_id: str = Field(default="", alias="JAPAN_AI_USER_ID")
         japan_ai_base_url: str = Field(default="https://api.japan-ai.co.jp", alias="JAPAN_AI_BASE_URL")
         japan_ai_model: str = Field(default="gpt-4o", alias="JAPAN_AI_MODEL")
         japan_ai_artifact_ids: str = Field(default="", alias="JAPAN_AI_ARTIFACT_IDS")
@@ -60,6 +61,7 @@ else:
         default_explanation_level: int = 2
         url_reaction_name: str = "eyes"
         japan_ai_api_key: str = ""
+        japan_ai_user_id: str = ""
         japan_ai_base_url: str = "https://api.japan-ai.co.jp"
         japan_ai_model: str = "gpt-4o"
         japan_ai_artifact_ids: str = ""
@@ -83,6 +85,7 @@ else:
                 "default_explanation_level": int(os.getenv("DEFAULT_EXPLANATION_LEVEL", "2")),
                 "url_reaction_name": os.getenv("URL_REACTION_NAME", "eyes"),
                 "japan_ai_api_key": os.getenv("JAPAN_AI_API_KEY", ""),
+                "japan_ai_user_id": os.getenv("JAPAN_AI_USER_ID", ""),
                 "japan_ai_base_url": os.getenv("JAPAN_AI_BASE_URL", "https://api.japan-ai.co.jp"),
                 "japan_ai_model": os.getenv("JAPAN_AI_MODEL", "gpt-4o"),
                 "japan_ai_artifact_ids": os.getenv("JAPAN_AI_ARTIFACT_IDS", ""),
@@ -103,6 +106,7 @@ else:
                 "DEFAULT_EXPLANATION_LEVEL": "default_explanation_level",
                 "URL_REACTION_NAME": "url_reaction_name",
                 "JAPAN_AI_API_KEY": "japan_ai_api_key",
+                "JAPAN_AI_USER_ID": "japan_ai_user_id",
                 "JAPAN_AI_BASE_URL": "japan_ai_base_url",
                 "JAPAN_AI_MODEL": "japan_ai_model",
                 "JAPAN_AI_ARTIFACT_IDS": "japan_ai_artifact_ids",

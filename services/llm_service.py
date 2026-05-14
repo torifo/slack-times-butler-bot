@@ -113,6 +113,7 @@ class LlmService:
                 "あなたは Slack times 投稿を整理するアシスタントです。"
                 "日本語で簡潔に、Slack にそのまま貼れる出力だけを返してください。"
             ),
+            "userId": self.settings.japan_ai_user_id,
             "artifactIds": self._artifact_ids(),
             "model": self.settings.japan_ai_model,
             "chatContextLimit": 10,
@@ -161,6 +162,7 @@ class LlmService:
                 "あなたは Slack times の digest 編集者です。"
                 "日本語で簡潔に返してください。"
             ),
+            "userId": self.settings.japan_ai_user_id,
             "artifactIds": self._artifact_ids(),
             "model": self.settings.japan_ai_model,
             "chatContextLimit": 10,
