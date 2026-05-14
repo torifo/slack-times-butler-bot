@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import re
 from collections import Counter
 
 try:
     import httpx
 except ModuleNotFoundError:  # pragma: no cover
     httpx = None
+
+try:
+    from slack_sdk import WebClient as SlackWebClient
+except ModuleNotFoundError:  # pragma: no cover
+    SlackWebClient = None
 
 from models.digest import DigestResult
 from models.message import MessageRecord
@@ -121,8 +127,30 @@ class LlmService:
             "temperature": self.settings.japan_ai_temperature,
         }
 
+    def _resolve_mentions(self, messages: list[MessageRecord]) -> list[str]:
+        if not (SlackWebClient and self.settings.slack_bot_token):
+            return [m.text for m in messages]
+        client = SlackWebClient(token=self.settings.slack_bot_token)
+        cache: dict[str, str] = {}
+
+        def resolve(text: str) -> str:
+            def replacer(match: re.Match) -> str:
+                user_id = match.group(1)
+                if user_id not in cache:
+                    try:
+                        resp = client.users_info(user=user_id)
+                        profile = resp["user"]["profile"]
+                        cache[user_id] = profile.get("display_name") or profile.get("real_name", user_id)
+                    except Exception:
+                        cache[user_id] = user_id
+                return cache[user_id]
+            return re.sub(r"<@([A-Z0-9]+)>", replacer, text)
+
+        return [resolve(m.text) for m in messages]
+
     def _build_digest_prompt(self, period_label: str, messages: list[MessageRecord]) -> dict[str, object]:
-        message_block = "\n".join(f"- {message.text}" for message in messages) or "- 投稿なし"
+        resolved_texts = self._resolve_mentions(messages)
+        message_block = "\n".join(f"- {text}" for text in resolved_texts) or "- 投稿なし"
         channel_name = self.settings.source_channel_name or self.settings.source_channel
         date = period_label.split()[0] if period_label else period_label
         return {
