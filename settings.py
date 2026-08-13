@@ -44,6 +44,11 @@ if BaseSettings:
         japan_ai_temperature: float = Field(default=0.1, alias="JAPAN_AI_TEMPERATURE")
         request_timeout_seconds: float = Field(default=20.0, alias="REQUEST_TIMEOUT_SECONDS")
 
+        llm_backend: str = Field(default="japan_ai", alias="LLM_BACKEND")
+        llm_gateway_url: str = Field(default="http://127.0.0.1:8100", alias="LLM_GATEWAY_URL")
+        llm_gateway_url_backup: str = Field(default="http://127.0.0.1:8101", alias="LLM_GATEWAY_URL_BACKUP")
+        llm_gateway_timeout_seconds: float = Field(default=180.0, alias="LLM_GATEWAY_TIMEOUT_SECONDS")
+
 
 else:
     @dataclass(slots=True)
@@ -70,6 +75,10 @@ else:
         japan_ai_chat_endpoint: str = "/chat/v2"
         japan_ai_temperature: float = 0.1
         request_timeout_seconds: float = 20.0
+        llm_backend: str = "japan_ai"
+        llm_gateway_url: str = "http://127.0.0.1:8100"
+        llm_gateway_url_backup: str = "http://127.0.0.1:8101"
+        llm_gateway_timeout_seconds: float = 180.0
 
         def __init__(self, **overrides: object):
             env_map = {
@@ -95,6 +104,10 @@ else:
                 "japan_ai_chat_endpoint": os.getenv("JAPAN_AI_CHAT_ENDPOINT", "/chat/v2"),
                 "japan_ai_temperature": float(os.getenv("JAPAN_AI_TEMPERATURE", "0.1")),
                 "request_timeout_seconds": float(os.getenv("REQUEST_TIMEOUT_SECONDS", "20.0")),
+                "llm_backend": os.getenv("LLM_BACKEND", "japan_ai"),
+                "llm_gateway_url": os.getenv("LLM_GATEWAY_URL", "http://127.0.0.1:8100"),
+                "llm_gateway_url_backup": os.getenv("LLM_GATEWAY_URL_BACKUP", "http://127.0.0.1:8101"),
+                "llm_gateway_timeout_seconds": float(os.getenv("LLM_GATEWAY_TIMEOUT_SECONDS", "180.0")),
             }
             aliases = {
                 "DATABASE_PATH": "database_path",
@@ -117,6 +130,10 @@ else:
                 "JAPAN_AI_CHAT_ENDPOINT": "japan_ai_chat_endpoint",
                 "JAPAN_AI_TEMPERATURE": "japan_ai_temperature",
                 "REQUEST_TIMEOUT_SECONDS": "request_timeout_seconds",
+                "LLM_BACKEND": "llm_backend",
+                "LLM_GATEWAY_URL": "llm_gateway_url",
+                "LLM_GATEWAY_URL_BACKUP": "llm_gateway_url_backup",
+                "LLM_GATEWAY_TIMEOUT_SECONDS": "llm_gateway_timeout_seconds",
             }
             normalized = dict(env_map)
             for key, value in overrides.items():

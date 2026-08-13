@@ -25,35 +25,80 @@ class LlmService:
         self.settings = settings
 
     def summarize_url(self, url: str, context_text: str, explanation_level: int = 2) -> UrlSummary:
-        if self.settings.japan_ai_api_key:
+        if self._gateway_enabled() or self.settings.japan_ai_api_key:
             summary = self._request_url_summary(url=url, context_text=context_text, explanation_level=explanation_level)
             if summary:
                 return summary
         return self._fallback_url_summary(url=url, context_text=context_text, explanation_level=explanation_level)
 
     def build_digest(self, period_label: str, messages: list[MessageRecord]) -> DigestResult:
-        if self.settings.japan_ai_api_key:
+        if self._gateway_enabled() or self.settings.japan_ai_api_key:
             digest = self._request_digest(period_label=period_label, messages=messages)
             if digest:
                 return digest
         return self._fallback_digest(period_label=period_label, messages=messages)
 
-    def _request_url_summary(self, url: str, context_text: str, explanation_level: int) -> UrlSummary | None:
-        prompt = self._build_url_prompt(url=url, context_text=context_text, explanation_level=explanation_level)
-        if httpx is None:
+    def _gateway_enabled(self) -> bool:
+        return self.settings.llm_backend == "claude_gateway" and httpx is not None
+
+    def _request_gateway_text(self, task: str, prompt_payload: dict[str, object]) -> str | None:
+        """llm-gateway（127.0.0.1・Claude Max枠）にタスクラベル付きで依頼する。
+
+        本命ポートに接続できない場合のみ予備ポートを試す。429（枠制御）や
+        5xx はゲートウェイ側の判断なので予備は試さず、JAPAN AI フォールバックへ。
+        """
+        body = {
+            "task": task,
+            "prompt": str(prompt_payload.get("prompt", "")),
+            "system_prompt": str(prompt_payload.get("systemPrompt", "")),
+        }
+        for base_url in (self.settings.llm_gateway_url, self.settings.llm_gateway_url_backup):
+            if not base_url:
+                continue
+            try:
+                with httpx.Client(timeout=self.settings.llm_gateway_timeout_seconds) as client:
+                    response = client.post(base_url.rstrip("/") + "/v1/complete", json=body)
+            except httpx.ConnectError:
+                continue
+            except httpx.HTTPError:
+                return None
+            if response.status_code != 200:
+                return None
+            try:
+                data = response.json()
+            except ValueError:
+                return None
+            text = data.get("text")
+            return text.strip() if isinstance(text, str) and text.strip() else None
+        return None
+
+    def _request_japan_ai_text(self, prompt_payload: dict[str, object]) -> str | None:
+        if httpx is None or not self.settings.japan_ai_api_key:
             return None
         try:
             with httpx.Client(timeout=self.settings.request_timeout_seconds) as client:
                 response = client.post(
                     self._chat_url(),
                     headers=self._headers(),
-                    json=prompt,
+                    json=prompt_payload,
                 )
                 response.raise_for_status()
                 data = response.json()
         except httpx.HTTPError:
             return None
-        content = self._extract_chat_message(data)
+        return self._extract_chat_message(data)
+
+    def _request_chat_text(self, task: str, prompt_payload: dict[str, object]) -> str | None:
+        content = None
+        if self._gateway_enabled():
+            content = self._request_gateway_text(task, prompt_payload)
+        if content is None:
+            content = self._request_japan_ai_text(prompt_payload)
+        return content
+
+    def _request_url_summary(self, url: str, context_text: str, explanation_level: int) -> UrlSummary | None:
+        prompt = self._build_url_prompt(url=url, context_text=context_text, explanation_level=explanation_level)
+        content = self._request_chat_text("times.url_summary", prompt)
         if not content:
             return None
         parsed = self._parse_key_value_block(content)
@@ -70,20 +115,8 @@ class LlmService:
 
     def _request_digest(self, period_label: str, messages: list[MessageRecord]) -> DigestResult | None:
         prompt = self._build_digest_prompt(period_label=period_label, messages=messages)
-        if httpx is None:
-            return None
-        try:
-            with httpx.Client(timeout=self.settings.request_timeout_seconds) as client:
-                response = client.post(
-                    self._chat_url(),
-                    headers=self._headers(),
-                    json=prompt,
-                )
-                response.raise_for_status()
-                data = response.json()
-        except httpx.HTTPError:
-            return None
-        content = self._extract_chat_message(data)
+        task = "times.digest.daily" if "daily" in period_label.lower() else "times.digest.weekly"
+        content = self._request_chat_text(task, prompt)
         if not content:
             return None
         return DigestResult(
