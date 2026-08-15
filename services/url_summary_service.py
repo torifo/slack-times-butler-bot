@@ -19,10 +19,10 @@ class UrlSummaryService:
         return summary
 
     def format_thread_reply(self, summary: UrlSummary) -> str:
-        bullets = "\n".join(f"• {bullet}" for bullet in summary.bullets[:4])
-        return (
-            f"[{summary.audience_label}] 概要をまとめました\n"
-            f"{summary.summary}\n"
-            f"{bullets}\n"
-            f"価値: {summary.value_line}"
-        ).strip()
+        bullets = "\n".join(f"• {bullet}" for bullet in summary.bullets[:3])
+        parts = [f"*{summary.title}*［{summary.audience_label}］", summary.summary]
+        if bullets:
+            parts.append(bullets)
+        if summary.value_line:
+            parts.append(f"→ {summary.value_line}")
+        return "\n".join(part for part in parts if part).strip()

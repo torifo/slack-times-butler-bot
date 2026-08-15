@@ -62,7 +62,9 @@ class DigestService:
         return snapshots
 
     def format_digest(self, digest: DigestResult) -> str:
-        if digest.summary.startswith("*") and "daily digest(" in digest.summary:
+        if digest.summary.startswith("*") and (
+            "daily digest(" in digest.summary or "weekly digest(" in digest.summary
+        ):
             return digest.summary
         sections = [
             f"*{digest.period_label} digest*",
